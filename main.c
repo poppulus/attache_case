@@ -36,9 +36,20 @@ void display()
 SDL_Window *w;
 SDL_Renderer *r;
 SDL_Event e;
-SDL_Rect q, inv_item, cur_item;
+SDL_Rect q, inv_item, cur_item, inv_item_err;
 
-int quit = 0, spawn_gun = 0, mx = 0, my = 0, item_id = 1;
+int quit = 0, spawn_gun = 0, test_item = 0, mx = 0, my = 0, item_id = 1;
+
+int item_align_check(SDL_Rect item, int x, int y, int w, int h)
+{
+    if (item.x < (x << 5) + w && item.x + item.w > (x << 5)
+    && item.y < (y << 5) + h && item.y + item.h > (y << 5))
+    {
+        return 0;
+    }
+
+    return 1;
+}
 
 void inventory_item_reset(case_item *item)
 {
@@ -103,8 +114,8 @@ void input()
                 {
                     if (clicked_item)
                     {
-                        if ((clicked_item->x << 5) + cur_item.w <= 320 
-                        && (clicked_item->y << 5) + cur_item.h <= 224)
+                        if (cur_item.x + cur_item.w <= 320 
+                        && cur_item.y + cur_item.h <= 224)
                         {
                             unsigned char ok = 1;
                             for (int i = 0; i < INVENTORY_SIZE; i++)
@@ -117,17 +128,17 @@ void input()
                                         case ITEM_FAID:
                                             if (inventory[i].align == ALIGN_HORIZONTAL)
                                             {
-                                                if (cur_item.x < (inventory[i].x << 5) + 64 
-                                                && cur_item.x + cur_item.w > (inventory[i].x << 5)
-                                                && cur_item.y < (inventory[i].y << 5) + 32
-                                                && cur_item.y + cur_item.h > (inventory[i].y << 5)) ok = 0;
+                                                ok = item_align_check(cur_item, 
+                                                                    inventory[i].x, 
+                                                                    inventory[i].y,
+                                                                    64, 32);
                                             }
                                             else if (inventory[i].align == ALIGN_VERTICAL)
                                             {
-                                                if (cur_item.x < (inventory[i].x << 5) + 32 
-                                                && cur_item.x + cur_item.w > (inventory[i].x << 5)
-                                                && cur_item.y < (inventory[i].y << 5) + 64
-                                                && cur_item.y + cur_item.h > (inventory[i].y << 5)) ok = 0;
+                                                ok = item_align_check(cur_item, 
+                                                                    inventory[i].x, 
+                                                                    inventory[i].y,
+                                                                    32, 64);
                                             }
                                             break;
                                     }
@@ -244,6 +255,7 @@ void render()
                 default: 
                     inv_item.w = 32;
                     inv_item.h = 32;
+                    SDL_SetRenderDrawColor(r, 0x80, 0x80, 0x80, SDL_ALPHA_OPAQUE);
                 break;
                 case ITEM_PISTOL:
                     if (inventory[i].align == ALIGN_HORIZONTAL)
@@ -259,8 +271,16 @@ void render()
                     SDL_SetRenderDrawColor(r, 0, 0x80, 0, SDL_ALPHA_OPAQUE);
                     break;
                 case ITEM_FAID:
-                    inv_item.w = 32;
-                    inv_item.h = 64;
+                    if (inventory[i].align == ALIGN_HORIZONTAL)
+                    {
+                        inv_item.w = 64;
+                        inv_item.h = 32;
+                    }
+                    else if (inventory[i].align == ALIGN_VERTICAL)
+                    {
+                        inv_item.w = 32;
+                        inv_item.h = 64;
+                    }
                     SDL_SetRenderDrawColor(r, 0, 0, 0x80, SDL_ALPHA_OPAQUE);
                     break;
             }
@@ -301,8 +321,50 @@ void render()
                     cur_item.y = 224 - cur_item.h;
                 break;
         }
+
         SDL_SetRenderDrawColor(r, 0, 0x80, 0, SDL_ALPHA_OPAQUE);
         SDL_RenderFillRect(r, &cur_item);
+
+        for (int i = 0; i < INVENTORY_SIZE; i++)
+        {
+            if (inventory[i].id && inventory[i].id != clicked_item->id)
+            {
+                switch (inventory[i].type)
+                {
+                    default: break;
+                    case ITEM_FAID:
+                        for (int y = cur_item.y >> 5; y < (cur_item.y >> 5) + (cur_item.h >> 5); y++)
+                        {
+                            for (int x = cur_item.x >> 5; x < (cur_item.x >> 5) + (cur_item.w >> 5); x++)
+                            {
+                                if (inventory[i].align == ALIGN_HORIZONTAL)
+                                {
+                                    if ((x == inventory[i].x || x == inventory[i].x + 1)
+                                    && y == inventory[i].y)
+                                    {
+                                        inv_item_err.x = x << 5;
+                                        inv_item_err.y = y << 5;
+                                        SDL_SetRenderDrawColor(r, 0x80, 0x00, 0x00, SDL_ALPHA_OPAQUE);
+                                        SDL_RenderFillRect(r, &inv_item_err);
+                                    }
+                                }
+                                else if (inventory[i].align == ALIGN_VERTICAL)
+                                {
+                                    if (x == inventory[i].x
+                                    && (y == inventory[i].y || y == inventory[i].y + 1))
+                                    {
+                                        inv_item_err.x = x << 5;
+                                        inv_item_err.y = y << 5;
+                                        SDL_SetRenderDrawColor(r, 0x80, 0x00, 0x00, SDL_ALPHA_OPAQUE);
+                                        SDL_RenderFillRect(r, &inv_item_err);
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                }
+            }
+        }
     }
 
     SDL_SetRenderDrawColor(r, 0x90, 0x90, 0x90, SDL_ALPHA_OPAQUE);
@@ -311,7 +373,7 @@ void render()
     for (int i = 1; i < 10; i++)
         SDL_RenderDrawLine(r, i << 5, 0, i << 5, 224);
     
-    for (int i = 1; i < 8; i++)
+    for (int i = 1; i < 7; i++)
         SDL_RenderDrawLine(r, 0, i << 5, 320, i << 5);
 
     if (clicked_item)
@@ -365,6 +427,9 @@ int main(int argc, const char *argv[])
     q.h = 224;
     q.x = 0;
     q.y = 0;
+
+    inv_item_err.w = 32;
+    inv_item_err.h = 32;
 
     inventory_reset(inventory);
 
